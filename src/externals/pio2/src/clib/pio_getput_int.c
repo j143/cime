@@ -797,8 +797,6 @@ int PIOc_get_var_tc(int ncid, int varid, nc_type xtype, void *buf)
     PIO_Offset *startp = NULL; /* Pointer to start array. */
     PIO_Offset *countp = NULL; /* Pointer to count array. */
     int ndims;   /* The number of dimensions in the variable. */
-    PIO_Offset my_start[PIO_MAX_DIMS];
-    PIO_Offset dimlen[PIO_MAX_DIMS];
     int ierr;    /* Return code from function calls. */
 
     LOG((1, "PIOc_get_var_tc ncid = %d varid = %d xtype = %d", ncid, varid,
@@ -817,30 +815,34 @@ int PIOc_get_var_tc(int ncid, int varid, nc_type xtype, void *buf)
      * start/count. */
     if (ndims)
     {
+
         /* Find the dimension IDs. */
         int dimids[ndims];
         if ((ierr = PIOc_inq_vardimid(ncid, varid, dimids)))
             return pio_err(ios, file, ierr, __FILE__, __LINE__);
 
+	if (!(countp = malloc(ndims * sizeof(PIO_Offset))))        /* Set up dimlen array. */
+	  return pio_err(ios, file, PIO_ENOMEM, __FILE__, __LINE__);
         /* Find the dimension lengths. */
         for (int d = 0; d < ndims; d++)
-            if ((ierr = PIOc_inq_dimlen(ncid, dimids[d], &dimlen[d])))
+            if ((ierr = PIOc_inq_dimlen(ncid, dimids[d], &countp[d])))
                 return pio_err(ios, file, ierr, __FILE__, __LINE__);
 
-        /* Set up start array. */
+	if (!(startp = malloc(ndims * sizeof(PIO_Offset))))        /* Set up start array. */
+	  return pio_err(ios, file, PIO_ENOMEM, __FILE__, __LINE__);
         for (int d = 0; d < ndims; d++)
         {
-            my_start[d] = 0;
-            LOG((3, "my_start[%d] = %d dimlen[%d] = %d", d, my_start[d], d,
-                 dimlen[d]));
+            startp[d] = 0;
+            LOG((3, "startp[%d] = %d dimlen[%d] = %d", d, startp[d], d,
+                 countp[d]));
         }
-
-        /* Set the start/count arrays. */
-        startp = my_start;
-        countp = dimlen;
     }
-
-    return PIOc_get_vars_tc(ncid, varid, startp, countp, NULL, xtype, buf);
+    ierr =  PIOc_get_vars_tc(ncid, varid, startp, countp, NULL, xtype, buf);
+    if (startp != NULL)
+      free(startp);
+    if (countp != NULL)
+      free(countp);
+    return ierr;
 }
 
 /**
@@ -1292,10 +1294,9 @@ int PIOc_put_var_tc(int ncid, int varid, nc_type xtype, const void *op)
 {
     iosystem_desc_t *ios;  /* Pointer to io system information. */
     file_desc_t *file;     /* Pointer to file information. */
-    PIO_Offset *startp = NULL; /* Pointer to start array. */
-    PIO_Offset *countp = NULL; /* Pointer to count array. */
-    PIO_Offset start[PIO_MAX_DIMS];
-    PIO_Offset count[PIO_MAX_DIMS];
+    PIO_Offset *start = NULL; /* Pointer to start array. */
+    PIO_Offset *count = NULL; /* Pointer to count array. */
+
     int ndims;   /* The number of dimensions in the variable. */
     int ierr;    /* Return code from function calls. */
 
@@ -1316,6 +1317,10 @@ int PIOc_put_var_tc(int ncid, int varid, nc_type xtype, const void *op)
     if (ndims)
     {
         int dimid[ndims];
+	if (!(start = malloc(ndims * sizeof(PIO_Offset))))        /* Set up start array. */
+	  return pio_err(ios, file, PIO_ENOMEM, __FILE__, __LINE__);
+	if (!(count = malloc(ndims * sizeof(PIO_Offset))))        /* Set up count array. */
+	  return pio_err(ios, file, PIO_ENOMEM, __FILE__, __LINE__);
 
         /* Set up start array. */
         for (int d = 0; d < ndims; d++)
@@ -1330,10 +1335,12 @@ int PIOc_put_var_tc(int ncid, int varid, nc_type xtype, const void *op)
             if ((ierr = PIOc_inq_dimlen(ncid, dimid[d], &count[d])))
                 return pio_err(ios, file, ierr, __FILE__, __LINE__);
 
-        /* Set the array pointers. */
-        startp = start;
-        countp = count;
     }
 
-    return PIOc_put_vars_tc(ncid, varid, startp, countp, NULL, xtype, op);
+    ierr = PIOc_put_vars_tc(ncid, varid, start, count, NULL, xtype, op);
+    if(start != NULL)
+      free(start);
+    if(count != NULL)
+      free(count);
+    return ierr;
 }
